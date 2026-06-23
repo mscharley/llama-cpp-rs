@@ -92,6 +92,15 @@ llama_rs_status llama_rs_mtp_speculative_accept(
     struct llama_rs_mtp_speculative * spec,
     uint16_t n_accepted);
 
+// Set the verbosity threshold of llama.cpp's `common` logger (a separate logger
+// from `llama_log_set`/`ggml_log_set`, which `send_logs_to_tracing` hooks). A
+// message logged via LOG_INF/LOG_WRN/etc. is emitted only when its level
+// (DEBUG=5, TRACE=4, INFO=3, WARN=2, ERROR=1) is <= `verbosity`. The `common`
+// logger writes straight to stdout/stderr and is not routed to tracing, so its
+// output corrupts a TUI; lowering the threshold (e.g. to 2 to keep WARN/ERROR
+// but drop INFO) silences chatty subsystems such as the speculative driver.
+void llama_rs_common_log_set_verbosity_thold(int verbosity);
+
 void llama_rs_string_free(char * ptr);
 
 #ifdef __cplusplus

@@ -12,6 +12,7 @@
 #include "llama.cpp/common/fit.h"
 #include "llama.cpp/common/json-schema-to-grammar.h"
 #include "llama.cpp/common/speculative.h"
+#include "llama.cpp/common/log.h"
 #include "llama.cpp/include/llama.h"
 #include "wrapper_utils.h"
 
@@ -40,6 +41,10 @@ extern "C" void llama_rs_string_free(char * ptr) {
     if (ptr) {
         std::free(ptr);
     }
+}
+
+extern "C" void llama_rs_common_log_set_verbosity_thold(int verbosity) {
+    common_log_set_verbosity_thold(verbosity);
 }
 
 extern "C" struct llama_sampler * llama_rs_sampler_init_grammar(

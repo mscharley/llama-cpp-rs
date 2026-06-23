@@ -633,3 +633,19 @@ pub fn send_logs_to_tracing(options: LogOptions) {
         llama_cpp_sys_2::ggml_log_set(Some(logs_to_trace), ggml_heap_state as *mut _);
     }
 }
+
+/// Set the verbosity threshold of llama.cpp's `common` logger.
+///
+/// The `common` library (compiled in under the `common` feature) carries its own logger, separate
+/// from the `llama_log_set` / `ggml_log_set` loggers that [`send_logs_to_tracing`] redirects. It
+/// writes straight to stdout/stderr and is not routed to tracing, so chatty `common` subsystems
+/// (notably the speculative driver) corrupt a TUI. A message logged at level `L`
+/// (`DEBUG`=5, `TRACE`=4, `INFO`=3, `WARN`=2, `ERROR`=1) is emitted only when `L <= verbosity`, so
+/// passing `2` keeps warnings and errors while dropping the per-call info spam. Not thread-safe; call
+/// once during initialisation. Only available with the `common` feature.
+#[cfg(feature = "common")]
+pub fn common_log_set_verbosity_thold(verbosity: i32) {
+    unsafe {
+        llama_cpp_sys_2::llama_rs_common_log_set_verbosity_thold(verbosity);
+    }
+}
