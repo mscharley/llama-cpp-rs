@@ -72,6 +72,12 @@ log_cs!(
 pub(super) enum Module {
     GGML,
     LlamaCpp,
+    /// The CLIP vision projector logger (clip.cpp / mtmd.cpp), separate from llama/ggml (`mtmd` feature).
+    #[cfg(feature = "mtmd")]
+    Clip,
+    /// The mtmd helper logger (`mtmd_helper_eval_chunks` image encode/decode), separate from the rest.
+    #[cfg(feature = "mtmd")]
+    Mtmd,
 }
 
 impl Module {
@@ -79,6 +85,10 @@ impl Module {
         match self {
             Module::GGML => "ggml",
             Module::LlamaCpp => "llama.cpp",
+            #[cfg(feature = "mtmd")]
+            Module::Clip => "clip",
+            #[cfg(feature = "mtmd")]
+            Module::Mtmd => "mtmd",
         }
     }
 }
@@ -279,6 +289,11 @@ impl State {
 
 pub(super) static LLAMA_STATE: OnceLock<Box<State>> = OnceLock::new();
 pub(super) static GGML_STATE: OnceLock<Box<State>> = OnceLock::new();
+/// State for the CLIP / mtmd-helper loggers redirected alongside llama/ggml under the `mtmd` feature.
+#[cfg(feature = "mtmd")]
+pub(super) static CLIP_STATE: OnceLock<Box<State>> = OnceLock::new();
+#[cfg(feature = "mtmd")]
+pub(super) static MTMD_STATE: OnceLock<Box<State>> = OnceLock::new();
 
 #[cfg(test)]
 mod tests {

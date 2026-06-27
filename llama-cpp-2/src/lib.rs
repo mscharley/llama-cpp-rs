@@ -619,6 +619,11 @@ pub fn send_logs_to_tracing(options: LogOptions) {
     // can't possibly interfere with each other. In other words, if llama.cpp emits a log without a trailing
     // newline and calls a GGML function, the logs won't be weirdly intermixed and instead we'll llama.cpp logs
     // will CONT previous llama.cpp logs and GGML logs will CONT previous ggml logs.
+    // Clone the options for the mtmd loggers before `options` is moved into the GGML state below.
+    #[cfg(feature = "mtmd")]
+    let options_clip = options.clone();
+    #[cfg(feature = "mtmd")]
+    let options_mtmd = options.clone();
     let llama_heap_state = Box::as_ref(
         log::LLAMA_STATE
             .get_or_init(|| Box::new(log::State::new(log::Module::LlamaCpp, options.clone()))),
@@ -631,6 +636,26 @@ pub fn send_logs_to_tracing(options: LogOptions) {
         // GGML has to be set after llama since setting llama sets ggml as well.
         llama_cpp_sys_2::llama_log_set(Some(logs_to_trace), llama_heap_state as *mut _);
         llama_cpp_sys_2::ggml_log_set(Some(logs_to_trace), ggml_heap_state as *mut _);
+    }
+
+    // The CLIP vision projector (clip.cpp / mtmd.cpp) and the mtmd helper (`mtmd_helper_eval_chunks`)
+    // each carry their own logger, separate from `llama_log_set` / `ggml_log_set`, defaulting to a
+    // raw stderr writer that corrupts a TUI. Redirect both into tracing the same way, each with its
+    // own `State` so their (and llama/ggml's) CONT lines never interleave.
+    #[cfg(feature = "mtmd")]
+    {
+        let clip_heap_state = Box::as_ref(
+            log::CLIP_STATE
+                .get_or_init(|| Box::new(log::State::new(log::Module::Clip, options_clip))),
+        ) as *const _;
+        let mtmd_heap_state = Box::as_ref(
+            log::MTMD_STATE
+                .get_or_init(|| Box::new(log::State::new(log::Module::Mtmd, options_mtmd))),
+        ) as *const _;
+        unsafe {
+            llama_cpp_sys_2::llama_rs_clip_log_set(Some(logs_to_trace), clip_heap_state as *mut _);
+            llama_cpp_sys_2::mtmd_helper_log_set(Some(logs_to_trace), mtmd_heap_state as *mut _);
+        }
     }
 }
 

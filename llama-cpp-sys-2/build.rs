@@ -361,7 +361,11 @@ fn main() {
         bindings_builder = bindings_builder
             .header("wrapper_mtmd.h")
             .allowlist_function("mtmd_.*")
-            .allowlist_type("mtmd_.*");
+            .allowlist_type("mtmd_.*")
+            // The clip-logger redirect shim emitted by `wrapper_mtmd.cpp` (allowlisted explicitly here
+            // so it is bound even when the `common` feature — which carries the general `llama_rs_.*`
+            // allowlist — is off).
+            .allowlist_function("llama_rs_clip_log_set");
     }
 
     // Configure Android-specific bindgen settings
@@ -565,6 +569,7 @@ fn main() {
     println!("cargo:rerun-if-changed=wrapper_common.cpp");
     println!("cargo:rerun-if-changed=wrapper_utils.h");
     println!("cargo:rerun-if-changed=wrapper_mtmd.h");
+    println!("cargo:rerun-if-changed=wrapper_mtmd.cpp");
 
     debug_log!("Bindings Created");
 
@@ -592,6 +597,34 @@ fn main() {
         }
 
         common_wrapper_build.compile("llama_cpp_sys_2_common_wrapper");
+    }
+
+    // The mtmd wrapper carries the clip-logger redirect shim (`llama_rs_clip_log_set`). It includes
+    // clip-impl.h, so it needs `tools/mtmd` on the include path — which the common wrapper does not —
+    // and references the `g_logger_state` global linked from the CMake-built mtmd library below. Built
+    // in its own TU, only under the `mtmd` feature, so a non-mtmd build never references clip internals.
+    if cfg!(feature = "mtmd") {
+        let mut mtmd_wrapper_build = cc::Build::new();
+        mtmd_wrapper_build
+            .cpp(true)
+            .file("wrapper_mtmd.cpp")
+            .include(&llama_src)
+            .include(llama_src.join("tools/mtmd"))
+            .include(llama_src.join("include"))
+            .include(llama_src.join("ggml/include"))
+            .include(llama_src.join("vendor"))
+            .flag_if_supported("-std=c++17")
+            .pic(true);
+
+        if matches!(target_os, TargetOs::Windows(WindowsVariant::Msvc)) {
+            mtmd_wrapper_build.flag("/std:c++17");
+        }
+
+        if matches!(target_os, TargetOs::Android) && cfg!(feature = "static-stdcxx") {
+            mtmd_wrapper_build.cpp_link_stdlib(None);
+        }
+
+        mtmd_wrapper_build.compile("llama_cpp_sys_2_mtmd_wrapper");
     }
 
     // Build with Cmake
