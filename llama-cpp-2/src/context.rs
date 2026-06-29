@@ -38,6 +38,30 @@ impl Debug for LlamaContext<'_> {
     }
 }
 
+/// Structured, host/device-flattened view of a constructed context's per-device memory breakdown.
+///
+/// This is the structured counterpart to [`LlamaContext::print_memory_breakdown`]: where that
+/// writes llama.cpp's per-device breakdown to the logger, this returns the byte counts as numbers.
+/// llama.cpp's native breakdown is a per-backend-buffer-type map; this collapses it into a host
+/// (CPU backend) side and a device (GPU backends) side. The `*_context` fields are the KV-cache
+/// plus any recurrent state, whose host-versus-device split is the KV-placement signal a caller
+/// reads to tell whether a constructed context kept its KV cache fully GPU-resident.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MemoryBreakdown {
+    /// Model-weight bytes resident on the device (GPU) backends.
+    pub device_model: u64,
+    /// Context (KV cache plus recurrent state) bytes resident on the device (GPU) backends.
+    pub device_context: u64,
+    /// Temporary compute-buffer bytes on the device (GPU) backends.
+    pub device_compute: u64,
+    /// Model-weight bytes resident on the host (CPU) backend.
+    pub host_model: u64,
+    /// Context (KV cache plus recurrent state) bytes resident on the host (CPU) backend.
+    pub host_context: u64,
+    /// Temporary compute-buffer bytes on the host (CPU) backend.
+    pub host_compute: u64,
+}
+
 impl<'model> LlamaContext<'model> {
     pub(crate) fn new(
         llama_model: &'model LlamaModel,
@@ -367,6 +391,27 @@ impl<'model> LlamaContext<'model> {
     #[cfg(feature = "common")]
     pub fn print_memory_breakdown(&self) {
         unsafe { llama_cpp_sys_2::llama_rs_memory_breakdown_print(self.context.as_ptr()) }
+    }
+
+    /// Read the structured per-device memory breakdown of this constructed context.
+    ///
+    /// Returns the model / context / compute byte counts split across the host (CPU) backend and
+    /// the device (GPU) backends, as a [`MemoryBreakdown`]. This is the structured counterpart to
+    /// [`print_memory_breakdown`](Self::print_memory_breakdown), reading the same underlying
+    /// `llama_get_memory_breakdown` data but returning it as numbers rather than logger output.
+    #[cfg(feature = "common")]
+    #[must_use]
+    pub fn memory_breakdown(&self) -> MemoryBreakdown {
+        let raw =
+            unsafe { llama_cpp_sys_2::llama_rs_memory_breakdown_data(self.context.as_ptr()) };
+        MemoryBreakdown {
+            device_model: raw.device_model,
+            device_context: raw.device_context,
+            device_compute: raw.device_compute,
+            host_model: raw.host_model,
+            host_context: raw.host_context,
+            host_compute: raw.host_compute,
+        }
     }
 }
 

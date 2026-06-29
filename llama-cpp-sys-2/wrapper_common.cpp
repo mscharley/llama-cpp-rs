@@ -14,6 +14,8 @@
 #include "llama.cpp/common/speculative.h"
 #include "llama.cpp/common/log.h"
 #include "llama.cpp/include/llama.h"
+#include "llama.cpp/src/llama-ext.h"
+#include "llama.cpp/ggml/include/ggml-backend.h"
 #include "wrapper_utils.h"
 
 #include <nlohmann/json.hpp>
@@ -340,4 +342,28 @@ extern "C" llama_rs_status llama_rs_mtp_speculative_accept(
     } catch (...) {
         return LLAMA_RS_STATUS_EXCEPTION;
     }
+}
+
+// Flatten llama.cpp's per-device memory breakdown (a std::map that cannot cross
+// FFI) into a host/device aggregate. Each map entry is classified host-vs-device
+// by ggml_backend_buft_is_host(buft), mirroring common/fit.cpp's split, and the
+// model/context/compute byte counts are summed into the matching side.
+extern "C" struct llama_rs_memory_breakdown llama_rs_memory_breakdown_data(const struct llama_context * ctx) {
+    llama_rs_memory_breakdown out = {};
+    if (!ctx) {
+        return out;
+    }
+    const llama_memory_breakdown breakdown = llama_get_memory_breakdown(ctx);
+    for (const auto & [buft, mb] : breakdown) {
+        if (ggml_backend_buft_is_host(buft)) {
+            out.host_model   += mb.model;
+            out.host_context += mb.context;
+            out.host_compute += mb.compute;
+        } else {
+            out.device_model   += mb.model;
+            out.device_context += mb.context;
+            out.device_compute += mb.compute;
+        }
+    }
+    return out;
 }

@@ -4,6 +4,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 struct llama_model;
 struct llama_sampler;
@@ -91,6 +92,27 @@ llama_rs_status llama_rs_mtp_speculative_draft(
 llama_rs_status llama_rs_mtp_speculative_accept(
     struct llama_rs_mtp_speculative * spec,
     uint16_t n_accepted);
+
+// FFI-safe, host/device-flattened aggregate of llama.cpp's per-device memory
+// breakdown. The native breakdown is a C++ `std::map` keyed by backend buffer
+// type and so cannot cross FFI; this collapses it into a host side and a device
+// side. Every field is in bytes. Device fields aggregate every non-host backend
+// buffer type (the GPU backends); host fields aggregate the host (CPU) backend.
+// The `*_context` fields are the KV-cache plus any recurrent-state memory — the
+// host/device split of `context` is the load-bearing KV-placement signal.
+struct llama_rs_memory_breakdown {
+    uint64_t device_model;
+    uint64_t device_context;
+    uint64_t device_compute;
+    uint64_t host_model;
+    uint64_t host_context;
+    uint64_t host_compute;
+};
+
+// Read the constructed context's per-device memory breakdown, flattening
+// llama.cpp's `std::map` into the host/device aggregate above. A null context
+// yields an all-zero breakdown.
+struct llama_rs_memory_breakdown llama_rs_memory_breakdown_data(const struct llama_context * ctx);
 
 // Set the verbosity threshold of llama.cpp's `common` logger (a separate logger
 // from `llama_log_set`/`ggml_log_set`, which `send_logs_to_tracing` hooks). A
